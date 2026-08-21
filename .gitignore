@@ -1,0 +1,27 @@
+# === NUNCA subir credenciais ===
+.env
+.env.*
+!.env.example
+
+# === Dependências (o npm install recria) ===
+node_modules/
+**/node_modules/
+
+# === Build do front ===
+dist/
+build/
+
+# === Modelo de IA baixado (é grande; recria sozinho no 1º start) ===
+.cache/
+**/.cache/
+*.onnx
+
+# === Logs e temporários ===
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# === Editor ===
+.vscode/
+.idea/

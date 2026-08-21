@@ -1,0 +1,630 @@
+import React, { useState, useRef } from 'react';
+
+const API = 'http://localhost:3001'; // em produção, URL da API
+
+async function fetchSuggestions(ticketText, aoMudarEtapa) {
+  aoMudarEtapa('Analisando o ticket…');
+
+  const r = await fetch(`${API}/api/suggest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ texto: ticketText }),
+  });
+
+  if (!r.ok) {
+    throw new Error('Falha na análise do ticket.');
+  }
+
+  return await r.json();
+}
+
+const BASE_CONHECIMENTO = [
+  {
+    id: 'SUP-18234',
+    titulo: 'Erro -5002 ao adicionar nota fiscal de saída',
+    modulo: 'Vendas',
+    produto: 'SAP B1 10.0',
+    keywords:
+      'erro -5002 nota fiscal saída adicionar odln depósito quantidade estoque insuficiente item bloqueado',
+    causa: 'Quantidade insuficiente no depósito selecionado para um dos itens.',
+    solucao:
+      'Verificar em Estoque > Relatórios > Situação do estoque a disponibilidade do item no depósito da linha. Ajustar o depósito na linha do documento ou liberar a configuração "Bloquear estoque negativo" apenas se a política da empresa permitir.',
+    resolvidoPor: 'C. Almeida',
+    data: '2026-03-12',
+  },
+  {
+    id: 'SUP-17911',
+    titulo: 'NF-e rejeitada: 539 — duplicidade de NF-e com diferença na chave',
+    modulo: 'Fiscal',
+    produto: 'BR ONE 4.2',
+    keywords:
+      'nfe rejeição 539 duplicidade chave acesso sefaz numeração nota fiscal eletrônica reenvio',
+    causa:
+      'Nota com a mesma numeração já autorizada na SEFAZ com chave diferente, geralmente após falha de comunicação no primeiro envio.',
+    solucao:
+      'No monitor de NF-e do BR ONE, consultar a situação da nota na SEFAZ (consulta por chave). Importar a autorização existente via "Sincronizar status" e, se necessário, inutilizar a numeração divergente antes de reemitir.',
+    resolvidoPor: 'M. Tanaka',
+    data: '2026-04-02',
+  },
+  {
+    id: 'SUP-17655',
+    titulo: 'Erro ODBC -1029 ao conectar add-on após atualização do SQL Server',
+    modulo: 'Infraestrutura',
+    produto: 'SAP B1 9.3',
+    keywords:
+      'odbc -1029 conexão sql server add-on driver native client erro conectar banco dados di api',
+    causa: 'Driver SQL Native Client ausente ou incompatível após atualização do servidor.',
+    solucao:
+      'Reinstalar o SQL Server Native Client compatível com a versão do B1, recriar o DSN de sistema (64 bits) e reiniciar o serviço SBO DI Server. Validar a conexão com o B1 Diagnostic Tool.',
+    resolvidoPor: 'R. Souza',
+    data: '2026-01-28',
+  },
+  {
+    id: 'SUP-18102',
+    titulo: 'Remessa CNAB 240 rejeitada pelo banco — segmento P inválido',
+    modulo: 'Financeiro',
+    produto: 'BR ONE 4.2',
+    keywords:
+      'cnab 240 remessa boleto banco rejeitada segmento p carteira nosso número convênio cobrança',
+    causa: 'Código de carteira/convênio desatualizado no cadastro de configurações bancárias.',
+    solucao:
+      'Em BR ONE > Financeiro > Configurações bancárias, conferir carteira, convênio e faixa de nosso número com o gerente da conta. Regerar a remessa após o ajuste; títulos já enviados devem ser reapresentados.',
+    resolvidoPor: 'C. Almeida',
+    data: '2026-02-19',
+  },
+  {
+    id: 'SUP-16980',
+    titulo: 'Timeout na autorização da SEFAZ em horários de pico',
+    modulo: 'Fiscal',
+    produto: 'BR ONE 4.1',
+    keywords:
+      'sefaz timeout autorização lenta nfe demora emissão contingência svc pico horário',
+    causa: 'Instabilidade no webservice estadual; tempo limite padrão do BR ONE muito baixo.',
+    solucao:
+      'Aumentar o timeout de autorização para 60 s nas configurações do BR ONE e habilitar o acionamento automático de contingência SVC-AN após 2 tentativas. Orientar o cliente a acompanhar o status pelo monitor.',
+    resolvidoPor: 'M. Tanaka',
+    data: '2025-11-07',
+  },
+  {
+    id: 'SUP-18301',
+    titulo: 'Depreciação de ativo fixo não executa para o período corrente',
+    modulo: 'Contabilidade',
+    produto: 'SAP B1 10.0',
+    keywords:
+      'depreciação ativo fixo execução período corrente fechamento área avaliação imobilizado erro',
+    causa: 'Período contábil do mês corrente ainda com status "Fechado" após virada de exercício.',
+    solucao:
+      'Em Administração > Inicialização do sistema > Períodos contábeis, reabrir o período corrente. Executar a depreciação em Ativo fixo > Execução de depreciação e conferir o log de simulação antes de contabilizar.',
+    resolvidoPor: 'P. Ferreira',
+    data: '2026-05-21',
+  },
+  {
+    id: 'SUP-17542',
+    titulo: 'Pedido de venda não permite copiar para nota fiscal — cliente bloqueado',
+    modulo: 'Vendas',
+    produto: 'SAP B1 10.0',
+    keywords:
+      'pedido venda copiar para nota fiscal cliente bloqueado limite crédito congelado parceiro negócio',
+    causa: 'Parceiro de negócio com status "Congelado" ou limite de crédito excedido.',
+    solucao:
+      'Verificar o cadastro do PN (aba Geral: campo Congelado; aba Pagamento: limite de crédito). Com aprovação do financeiro, ajustar o limite ou usar o procedimento de autorização configurado para liberar o documento.',
+    resolvidoPor: 'R. Souza',
+    data: '2026-04-30',
+  },
+  {
+    id: 'SUP-18077',
+    titulo: 'Apuração de ICMS-ST divergente no BR ONE após mudança de NCM',
+    modulo: 'Fiscal',
+    produto: 'BR ONE 4.2',
+    keywords:
+      'icms st substituição tributária apuração divergente ncm mva alíquota cest imposto cálculo',
+    causa: 'Regra fiscal antiga ainda vigente para o NCM alterado, com MVA desatualizado.',
+    solucao:
+      'Em BR ONE > Fiscal > Regras de tributação, encerrar a vigência da regra anterior e cadastrar nova regra com MVA/CEST atualizados a partir da data da mudança. Reprocessar os documentos do período pelo recálculo fiscal.',
+    resolvidoPor: 'P. Ferreira',
+    data: '2026-03-29',
+  },
+];
+
+const DOCS_RELACIONADOS = {
+  Fiscal: [
+    { titulo: 'BR ONE — Guia do monitor de NF-e', ref: 'KB-BR1-014' },
+    { titulo: 'Manual de contingência SEFAZ (SVC-AN/SVC-RS)', ref: 'KB-BR1-022' },
+  ],
+  Vendas: [
+    { titulo: 'SAP B1 — Documentos de marketing: cópia e estornos', ref: 'KB-B1-031' },
+    { titulo: 'Política de bloqueio de estoque negativo', ref: 'KB-B1-008' },
+  ],
+  Financeiro: [{ titulo: 'BR ONE — Configuração de cobrança CNAB 240', ref: 'KB-BR1-019' }],
+  Infraestrutura: [{ titulo: 'Matriz de compatibilidade SQL Server × SAP B1', ref: 'KB-B1-002' }],
+  Contabilidade: [{ titulo: 'SAP B1 — Períodos contábeis e virada de exercício', ref: 'KB-B1-027' }],
+};
+
+const EXEMPLOS = [
+  {
+    rotulo: 'Erro -5002',
+    texto:
+      'Cliente Metalúrgica Andrade relata erro -5002 ao tentar adicionar nota fiscal de saída a partir do pedido 4471. Acontece só com o item ACO-1020. SAP B1 10.0 PL08.',
+  },
+  {
+    rotulo: 'Rejeição 539',
+    texto:
+      'NF-e número 8812 está sendo rejeitada com o código 539 (duplicidade com diferença na chave de acesso). Ontem houve queda de internet durante a emissão. BR ONE 4.2.',
+  },
+  {
+    rotulo: 'Boleto CNAB',
+    texto:
+      'O banco devolveu a remessa de cobrança CNAB 240 inteira, informando segmento P inválido. Cliente trocou de agência no mês passado. BR ONE 4.2.',
+  },
+];
+
+/* ---------- pipeline simulado (substituir pela API real) ---------- */
+
+const ETAPAS = [
+  'Interpretando o ticket…',
+  'Busca híbrida na base de conhecimento…',
+  'Reordenando candidatos (rerank)…',
+  'Gerando sugestão com citações…',
+];
+
+function tokenizar(texto) {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\- ]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length > 2);
+}
+
+function pontuar(ticketTokens, item) {
+  const alvo = new Set(tokenizar(item.keywords + ' ' + item.titulo));
+  let acertos = 0;
+  for (const t of ticketTokens) if (alvo.has(t)) acertos += 1;
+  const unicos = new Set(ticketTokens).size || 1;
+  return Math.min(1, (acertos / unicos) * 1.9);
+}
+
+async function fetchSuggestions(ticketText, aoMudarEtapa) {
+  for (let i = 0; i < ETAPAS.length; i++) {
+    aoMudarEtapa(ETAPAS[i]);
+    await new Promise((r) => setTimeout(r, 420 + Math.random() * 380));
+  }
+
+  const tokens = tokenizar(ticketText);
+  const ranqueados = BASE_CONHECIMENTO.map((item) => ({
+    ...item,
+    score: pontuar(tokens, item),
+  }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .filter((r) => r.score > 0.08);
+
+  const melhor = ranqueados[0]?.score ?? 0;
+  const confianca = melhor >= 0.62 ? 'alta' : melhor >= 0.34 ? 'media' : 'baixa';
+  const abstencao = melhor < 0.16;
+
+  const moduloPrincipal = ranqueados[0]?.modulo;
+  const docs = moduloPrincipal ? DOCS_RELACIONADOS[moduloPrincipal] ?? [] : [];
+
+  return {
+    abstencao,
+    confianca,
+    similares: ranqueados,
+    procedimento: abstencao
+      ? []
+      : [
+          `Confirmar com o cliente o cenário descrito em ${ranqueados[0].id}: ${ranqueados[0].causa}`,
+          ranqueados[0].solucao,
+          'Validar o resultado com o cliente e registrar a causa raiz no encerramento do ticket.',
+        ],
+    docs,
+  };
+}
+
+/* ---------- componentes ---------- */
+
+const ROTULO_CONFIANCA = {
+  alta: { texto: 'Confiança alta', classe: 'conf-alta' },
+  media: { texto: 'Confiança média', classe: 'conf-media' },
+  baixa: { texto: 'Confiança baixa', classe: 'conf-baixa' },
+};
+
+function BarraScore({ score }) {
+  const pct = Math.round(score * 100);
+  const nivel = score >= 0.62 ? 'alta' : score >= 0.34 ? 'media' : 'baixa';
+  return (
+    <div className="score-bloco" title={`Similaridade: ${pct}%`}>
+      <span className={`score-num score-${nivel}`}>{pct}%</span>
+      <div className="score-trilha">
+        <div className={`score-preench score-bg-${nivel}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function CartaoSimilar({ item, expandido, aoExpandir }) {
+  return (
+    <article className={`cartao ${expandido ? 'cartao-aberto' : ''}`}>
+      <button className="cartao-cab" onClick={aoExpandir} aria-expanded={expandido}>
+        <div className="cartao-meta">
+          <span className="chip chip-id">{item.id}</span>
+          <span className="chip">{item.modulo}</span>
+          <span className="chip">{item.produto}</span>
+        </div>
+        <h3 className="cartao-titulo">{item.titulo}</h3>
+        <BarraScore score={item.score} />
+      </button>
+      {expandido && (
+        <div className="cartao-corpo">
+          <p>
+            <strong>Causa raiz:</strong> {item.causa}
+          </p>
+          <p>
+            <strong>Solução aplicada:</strong> {item.solucao}
+          </p>
+          <p className="cartao-rodape">
+            Resolvido por {item.resolvidoPor} em {item.data}
+          </p>
+        </div>
+      )}
+    </article>
+  );
+}
+
+export default function App() {
+  const [texto, setTexto] = useState('');
+  const [etapa, setEtapa] = useState(null);
+  const [resultado, setResultado] = useState(null);
+  const [expandido, setExpandido] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+
+  const analisando = etapa !== null;
+
+  async function analisar() {
+    if (!texto.trim() || analisando) return;
+    setResultado(null);
+    setFeedback(null);
+    setExpandido(0);
+    const r = await fetchSuggestions(texto, setEtapa);
+    setEtapa(null);
+    setResultado(r);
+  }
+
+  function registrarFeedback(valor) {
+    setFeedback(valor);
+
+    fetch(`${API}/api/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticket: texto, sugestao: resultado, resultado: valor }),
+    }).catch((err) => console.error('Erro ao enviar feedback:', err));
+
+    setToast('Feedback registrado — obrigado, ele realimenta a base.');
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3200);
+  }
+
+  return (
+    <div className="app">
+      <style>{CSS}</style>
+
+      <header className="topo">
+        <div className="marca">
+          <span className="marca-logo">Ti</span>
+          <div>
+            <h1>TicketInsight</h1>
+            <p>Triagem inteligente — SAP Business One · BR ONE</p>
+          </div>
+        </div>
+        <span className="chip chip-poc">POC · base simulada</span>
+      </header>
+
+      <main className="grade">
+        <section className="painel painel-entrada">
+          <h2>Novo ticket</h2>
+          <p className="dica">
+            Cole a descrição do chamado. Em produção, este campo é preenchido automaticamente pelo
+            webhook do sistema de chamados.
+          </p>
+          <textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder="Descreva o problema relatado pelo cliente…"
+            rows={8}
+            disabled={analisando}
+          />
+          <div className="exemplos">
+            <span>Exemplos:</span>
+            {EXEMPLOS.map((ex) => (
+              <button
+                key={ex.rotulo}
+                className="botao-exemplo"
+                onClick={() => setTexto(ex.texto)}
+                disabled={analisando}
+              >
+                {ex.rotulo}
+              </button>
+            ))}
+          </div>
+          <button className="botao-primario" onClick={analisar} disabled={!texto.trim() || analisando}>
+            {analisando ? etapa : 'Analisar ticket'}
+          </button>
+          {analisando && <div className="barra-progresso" />}
+        </section>
+
+        <section className="painel painel-resultado">
+          {!resultado && !analisando && (
+            <div className="vazio">
+              <p>As sugestões da IA aparecem aqui.</p>
+              <p className="dica">
+                O sistema busca chamados resolvidos, artigos e documentação do SAP B1 e do BR ONE
+                semelhantes ao ticket informado.
+              </p>
+            </div>
+          )}
+
+          {analisando && (
+            <div className="vazio">
+              <p className="pulsando">{etapa}</p>
+            </div>
+          )}
+
+          {resultado && resultado.abstencao && (
+            <div className="abstencao">
+              <h2>Nenhum caso suficientemente similar</h2>
+              <p>
+                A base não contém chamados próximos o bastante deste cenário. Trate como caso novo —
+                ao resolvê-lo com boa documentação, ele passará a ajudar os próximos analistas.
+              </p>
+            </div>
+          )}
+
+          {resultado && !resultado.abstencao && (
+            <>
+              <div className="resultado-cab">
+                <h2>Sugestão do TicketInsight</h2>
+                <span className={`selo ${ROTULO_CONFIANCA[resultado.confianca].classe}`}>
+                  {ROTULO_CONFIANCA[resultado.confianca].texto}
+                </span>
+              </div>
+
+              <h3 className="secao">Procedimento recomendado</h3>
+              <ol className="procedimento">
+                {resultado.procedimento.map((p, i) => (
+                  <li key={i}>{p}</li>
+                ))}
+              </ol>
+
+              <h3 className="secao">
+                Chamados similares <span className="contagem">{resultado.similares.length}</span>
+              </h3>
+              <div className="lista-cartoes">
+                {resultado.similares.map((item, i) => (
+                  <CartaoSimilar
+                    key={item.id}
+                    item={item}
+                    expandido={expandido === i}
+                    aoExpandir={() => setExpandido(expandido === i ? null : i)}
+                  />
+                ))}
+              </div>
+
+              {resultado.docs.length > 0 && (
+                <>
+                  <h3 className="secao">Documentação relacionada</h3>
+                  <ul className="docs">
+                    {resultado.docs.map((d) => (
+                      <li key={d.ref}>
+                        <span className="chip chip-id">{d.ref}</span> {d.titulo}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              <div className="feedback">
+                <p>Esta sugestão ajudou na resolução?</p>
+                <div className="feedback-botoes">
+                  {[
+                    ['resolveu', 'Resolveu'],
+                    ['parcial', 'Ajudou parcialmente'],
+                    ['nao', 'Sem relação'],
+                  ].map(([valor, rotulo]) => (
+                    <button
+                      key={valor}
+                      className={`botao-feedback ${feedback === valor ? 'fb-ativo' : ''}`}
+                      onClick={() => registrarFeedback(valor)}
+                    >
+                      {rotulo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+      </main>
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+/* ---------- estilos ---------- */
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --tinta: #1c2734;
+  --tinta-suave: #5a6b7e;
+  --papel: #f5f7f9;
+  --branco: #ffffff;
+  --borda: #dde4ea;
+  --petrol: #0e7c66;
+  --petrol-claro: #e3f3ef;
+  --ambar: #b07a14;
+  --ambar-claro: #fbf1dc;
+  --tijolo: #b3402e;
+  --tijolo-claro: #fae8e4;
+  --azul: #20486e;
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+body { background: var(--papel); }
+
+.app {
+  min-height: 100vh;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  color: var(--tinta);
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+}
+
+.topo {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 20px; border-bottom: 1px solid var(--borda); margin-bottom: 24px;
+}
+.marca { display: flex; align-items: center; gap: 14px; }
+.marca-logo {
+  font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 20px;
+  background: var(--azul); color: #fff; width: 44px; height: 44px;
+  display: grid; place-items: center; border-radius: 10px;
+}
+.marca h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.marca p { font-size: 13px; color: var(--tinta-suave); }
+
+.grade { display: grid; grid-template-columns: 5fr 7fr; gap: 24px; align-items: start; }
+@media (max-width: 880px) { .grade { grid-template-columns: 1fr; } }
+
+.painel {
+  background: var(--branco); border: 1px solid var(--borda);
+  border-radius: 14px; padding: 24px;
+}
+.painel h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.dica { font-size: 13px; color: var(--tinta-suave); line-height: 1.55; margin-bottom: 14px; }
+
+textarea {
+  width: 100%; resize: vertical; font: inherit; font-size: 14px; line-height: 1.6;
+  border: 1px solid var(--borda); border-radius: 10px; padding: 12px 14px;
+  color: var(--tinta); background: var(--papel);
+}
+textarea:focus { outline: 2px solid var(--azul); outline-offset: 1px; background: #fff; }
+
+.exemplos {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 12px 0 16px; font-size: 12.5px; color: var(--tinta-suave);
+}
+.botao-exemplo {
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  border: 1px solid var(--borda); background: var(--papel);
+  border-radius: 999px; padding: 4px 12px; color: var(--tinta);
+}
+.botao-exemplo:hover { border-color: var(--azul); }
+
+.botao-primario {
+  width: 100%; font: inherit; font-weight: 500; font-size: 15px; cursor: pointer;
+  background: var(--azul); color: #fff; border: none; border-radius: 10px; padding: 13px;
+  transition: opacity .15s;
+}
+.botao-primario:disabled { opacity: .55; cursor: default; }
+
+.barra-progresso {
+  height: 3px; border-radius: 2px; margin-top: 12px;
+  background: linear-gradient(90deg, var(--azul) 30%, var(--borda) 30%);
+  background-size: 200% 100%; animation: desliza 1.1s linear infinite;
+}
+@keyframes desliza { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .barra-progresso { animation: none; } .pulsando { animation: none; } }
+
+.vazio { text-align: center; padding: 56px 24px; color: var(--tinta-suave); }
+.vazio p:first-child { font-size: 15px; color: var(--tinta); margin-bottom: 8px; }
+.pulsando { animation: pulsa 1.2s ease-in-out infinite; }
+@keyframes pulsa { 50% { opacity: .45; } }
+
+.abstencao { padding: 32px 8px; }
+.abstencao h2 { margin-bottom: 10px; }
+.abstencao p { font-size: 14px; line-height: 1.6; color: var(--tinta-suave); }
+
+.resultado-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.selo { font-size: 12.5px; font-weight: 500; border-radius: 999px; padding: 5px 14px; white-space: nowrap; }
+.conf-alta  { background: var(--petrol-claro); color: var(--petrol); }
+.conf-media { background: var(--ambar-claro);  color: var(--ambar); }
+.conf-baixa { background: var(--tijolo-claro); color: var(--tijolo); }
+
+.secao {
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--tinta-suave); margin: 22px 0 10px;
+}
+.contagem {
+  font-family: 'IBM Plex Mono', monospace; font-weight: 400;
+  background: var(--papel); border: 1px solid var(--borda);
+  border-radius: 6px; padding: 1px 7px; margin-left: 6px;
+}
+
+.procedimento { padding-left: 20px; display: grid; gap: 8px; }
+.procedimento li { font-size: 14px; line-height: 1.6; }
+
+.lista-cartoes { display: grid; gap: 10px; }
+.cartao { border: 1px solid var(--borda); border-radius: 12px; overflow: hidden; background: #fff; }
+.cartao-aberto { border-color: var(--azul); }
+.cartao-cab {
+  width: 100%; text-align: left; font: inherit; cursor: pointer;
+  background: none; border: none; padding: 14px 16px; display: grid; gap: 8px;
+}
+.cartao-cab:hover { background: var(--papel); }
+.cartao-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  font-size: 11.5px; color: var(--tinta-suave); background: var(--papel);
+  border: 1px solid var(--borda); border-radius: 6px; padding: 2px 8px;
+}
+.chip-id { font-family: 'IBM Plex Mono', monospace; color: var(--azul); }
+.chip-poc { background: var(--ambar-claro); border-color: transparent; color: var(--ambar); }
+.cartao-titulo { font-size: 14.5px; font-weight: 500; line-height: 1.4; }
+
+.score-bloco { display: flex; align-items: center; gap: 10px; }
+.score-num { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 500; min-width: 42px; }
+.score-alta  { color: var(--petrol); }
+.score-media { color: var(--ambar); }
+.score-baixa { color: var(--tijolo); }
+.score-trilha { flex: 1; height: 5px; background: var(--papel); border-radius: 3px; overflow: hidden; }
+.score-preench { height: 100%; border-radius: 3px; }
+.score-bg-alta  { background: var(--petrol); }
+.score-bg-media { background: var(--ambar); }
+.score-bg-baixa { background: var(--tijolo); }
+
+.cartao-corpo { border-top: 1px solid var(--borda); padding: 14px 16px; display: grid; gap: 10px; }
+.cartao-corpo p { font-size: 13.5px; line-height: 1.6; }
+.cartao-rodape { color: var(--tinta-suave); font-size: 12.5px; }
+
+.docs { list-style: none; display: grid; gap: 8px; }
+.docs li { font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+
+.feedback {
+  margin-top: 26px; border-top: 1px solid var(--borda); padding-top: 18px;
+}
+.feedback p { font-size: 13.5px; margin-bottom: 10px; }
+.feedback-botoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.botao-feedback {
+  font: inherit; font-size: 13px; cursor: pointer;
+  border: 1px solid var(--borda); background: #fff; color: var(--tinta);
+  border-radius: 999px; padding: 7px 16px;
+}
+.botao-feedback:hover { border-color: var(--azul); }
+.fb-ativo { background: var(--azul); border-color: var(--azul); color: #fff; }
+
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--tinta); color: #fff; font-size: 13.5px;
+  border-radius: 10px; padding: 11px 20px; box-shadow: 0 6px 24px rgba(0,0,0,.18);
+}
+
+button:focus-visible, textarea:focus-visible, .cartao-cab:focus-visible {
+  outline: 2px solid var(--azul); outline-offset: 2px;
+}
+`;
